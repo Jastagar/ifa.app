@@ -35,6 +35,9 @@ object IfaState {
     private val _wakePeak = MutableStateFlow(0f)
     val wakePeak = _wakePeak.asStateFlow()
 
+    private val _micLevel = MutableStateFlow(0f)
+    val micLevel = _micLevel.asStateFlow()
+
     fun setPhase(phase: Phase) {
         _phase.value = phase
     }
@@ -54,6 +57,10 @@ object IfaState {
     fun setWakeScore(score: Float) {
         _wakeScore.value = score
         if (score > _wakePeak.value) _wakePeak.value = score
+    }
+
+    fun setMicLevel(level: Float) {
+        _micLevel.value = level
     }
 
     fun resetWakePeak() {

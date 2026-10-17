@@ -52,6 +52,10 @@ Everything runs over one WebSocket (`ws://<pc>:8789/phone`, header `X-IFA-Token:
 
 The wake-word models live in `app/src/main/assets/wakeword/`. If you train a custom "hey ifa" model, replace `ifa.onnx` there too.
 
+## With the app closed
+
+Once you tap **Start Ifa**, the wake word keeps working with the app closed or swiped away and the screen off. A background service keeps going, and the "Ifa" notification shows it's on. It stops when you tap **Stop**, force-stop the app, or restart the phone. After a restart, open the app once: Android doesn't let an app turn the microphone on from the background, so it can't start itself at boot. Tap **Keep Ifa running in the background** in Settings so battery saving doesn't kill it. Some phones (Xiaomi, OnePlus, Oppo, Vivo, Samsung) also need **Unrestricted** battery for the app in system settings.
+
 ## Notes
 
 - Android shows the green mic indicator while the wake word is on. Turn the wake word off in Settings to use the mic button only. The mic is off whenever the PC isn't connected.

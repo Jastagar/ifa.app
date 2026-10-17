@@ -27,6 +27,7 @@ import com.ifanotif.ifanotif.ifa.IfaSettings
 import com.ifanotif.ifanotif.ifa.IfaState
 import com.ifanotif.ifanotif.ifa.Phase
 import com.ifanotif.ifanotif.utils.AppLogger
+import com.ifanotif.ifanotif.voice.Endpointer
 import com.ifanotif.ifanotif.voice.MicRecorder
 import com.ifanotif.ifanotif.voice.SpeechPlayer
 import com.ifanotif.ifanotif.voice.WakeWordEngine
@@ -68,6 +69,8 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     private var pcConsecutive = 2
     private var followUp = false
     private var followUpSec = 5.0
+    private var vadSilenceMs = 1500
+    @Volatile private var endpointer: Endpointer? = null
     private var ignoreUntilTurnEnd = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -211,6 +214,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 pcThreshold = message.optDouble("wakeThreshold", 0.5).toFloat()
                 pcConsecutive = message.optInt("wakeConsecutive", 2).coerceAtLeast(1)
                 followUpSec = message.optDouble("followupSec", 5.0)
+                vadSilenceMs = message.optInt("vadSilenceMs", 1500)
                 val name = message.optString("name", connection?.host?.name ?: "PC")
                 retryDelayMs = 2_000
                 IfaState.setPcName(name)
@@ -266,6 +270,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         val begin = {
             if (phase == Phase.LISTENING && connection === conn) {
                 conn.send("start", "startTimeoutMs" to timeoutMs)
+                endpointer = Endpointer(silenceMs = vadSilenceMs + ENDPOINT_GRACE_MS)
                 streaming = true
                 updateMic()
             }
@@ -299,7 +304,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         }
         when (phase) {
             Phase.IDLE -> startListening(timeoutMs = 8_000, cue = true)
-            Phase.LISTENING -> conn.send("stop")
+            Phase.LISTENING -> conn.send("stop", "reason" to "button")
             Phase.THINKING, Phase.SPEAKING -> {
                 player.stop()
                 conn.send("cancel")
@@ -330,9 +335,21 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
 
     private fun onMicChunk(chunk: ShortArray) {
         when (phase) {
-            Phase.LISTENING -> if (streaming) connection?.sendAudio(chunk)
+            Phase.LISTENING -> if (streaming) stream(chunk)
             Phase.IDLE -> detectWake(chunk)
             else -> Unit
+        }
+    }
+
+    private fun stream(chunk: ShortArray) {
+        val conn = connection ?: return
+        conn.sendAudio(chunk)
+        val ep = endpointer ?: return
+        val done = ep.process(chunk)
+        IfaState.setMicLevel(ep.level)
+        if (done) {
+            endpointer = null
+            post { if (phase == Phase.LISTENING && connection === conn) conn.send("stop", "reason" to "silence") }
         }
     }
 
@@ -555,6 +572,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         private const val WAKE_CHANNEL = "ifa_wake"
         private const val SERVICE_NOTIFICATION_ID = 1
         private const val WAKE_NOTIFICATION_ID = 2
+        private const val ENDPOINT_GRACE_MS = 300
         private const val CODE_HINT =
             "Enter the pairing code shown in the Ifa launcher (Phone app row) or printed in Ifa's console as \"Pairing code: …\"."
 

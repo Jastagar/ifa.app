@@ -1,12 +1,14 @@
 package com.ifanotif.ifanotif
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -172,7 +174,7 @@ fun IfaScreen(modifier: Modifier = Modifier) {
                     IfaVoiceService.send(context, IfaVoiceService.ACTION_TALK)
                 }
             }
-            item { WakeMeter() }
+            item { if (phase == Phase.LISTENING) MicMeter() else WakeMeter() }
         }
 
         item { Conversation(chat) }
@@ -249,6 +251,15 @@ private fun TalkButton(phase: Phase, enabled: Boolean, onClick: () -> Unit) {
         }
         Spacer(Modifier.size(8.dp))
         Text(hint, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun MicMeter() {
+    val level by IfaState.micLevel.collectAsState()
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Mic level %.3f — stops by itself about a second after you go quiet".format(level), style = MaterialTheme.typography.bodySmall)
+        LinearProgressIndicator(progress = { (level * 8f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -416,6 +427,18 @@ private fun SettingsCard() {
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Allow full-screen alerts (needed to show over the lock screen)") }
                 }
+            }
+
+            val power = context.getSystemService(PowerManager::class.java)
+            if (!power.isIgnoringBatteryOptimizations(context.packageName)) {
+                OutlinedButton(
+                    onClick = {
+                        @SuppressLint("BatteryLife")
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Keep Ifa running in the background (battery: unrestricted)") }
             }
 
             HorizontalDivider()
