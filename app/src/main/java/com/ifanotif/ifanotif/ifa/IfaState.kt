@@ -38,6 +38,9 @@ object IfaState {
     private val _micLevel = MutableStateFlow(0f)
     val micLevel = _micLevel.asStateFlow()
 
+    private val _micGain = MutableStateFlow(1f)
+    val micGain = _micGain.asStateFlow()
+
     fun setPhase(phase: Phase) {
         _phase.value = phase
     }
@@ -61,6 +64,10 @@ object IfaState {
 
     fun setMicLevel(level: Float) {
         _micLevel.value = level
+    }
+
+    fun setMicGain(gain: Float) {
+        _micGain.value = gain
     }
 
     fun resetWakePeak() {

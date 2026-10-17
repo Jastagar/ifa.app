@@ -2,6 +2,7 @@ package com.ifanotif.ifanotif.ifa
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.ifanotif.ifanotif.voice.MicGain
 
 object IfaSettings {
     private const val PREFS_NAME = "ifa_settings"
@@ -29,6 +30,17 @@ object IfaSettings {
     var wakeThreshold: String
         get() = prefs.getString("wake_threshold", "")!!
         set(value) = prefs.edit().putString("wake_threshold", value.trim()).apply()
+
+    /** Empty means "learn it automatically". */
+    var micBoost: String
+        get() = prefs.getString("mic_boost", "")!!
+        set(value) = prefs.edit().putString("mic_boost", value.trim()).apply()
+
+    var learnedMicGain: Float
+        get() = prefs.getFloat("learned_mic_gain", MicGain.DEFAULT)
+        set(value) = prefs.edit().putFloat("learned_mic_gain", value).apply()
+
+    fun micGain(): Float = micBoost.toFloatOrNull()?.coerceIn(MicGain.MIN, MicGain.MAX) ?: learnedMicGain
 
     var wakeScreen: Boolean
         get() = prefs.getBoolean("wake_screen", true)

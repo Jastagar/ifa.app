@@ -28,6 +28,7 @@ import com.ifanotif.ifanotif.ifa.IfaState
 import com.ifanotif.ifanotif.ifa.Phase
 import com.ifanotif.ifanotif.utils.AppLogger
 import com.ifanotif.ifanotif.voice.Endpointer
+import com.ifanotif.ifanotif.voice.MicGain
 import com.ifanotif.ifanotif.voice.MicRecorder
 import com.ifanotif.ifanotif.voice.SpeechPlayer
 import com.ifanotif.ifanotif.voice.WakeWordEngine
@@ -72,6 +73,8 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     private var vadSilenceMs = 1500
     @Volatile private var endpointer: Endpointer? = null
     @Volatile private var peakLevel = 0f
+    @Volatile private var gain = 1f
+    @Volatile private var rawPeak = 0f
     private var listeningForFollowUp = false
     private var ignoreUntilTurnEnd = false
 
@@ -226,6 +229,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 enterIdle()
             }
             "end_of_speech" -> {
+                if (streaming) learnMicGain()
                 streaming = false
                 if (phase == Phase.LISTENING) setPhase(Phase.THINKING)
                 updateMic()
@@ -266,6 +270,15 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         }
     }
 
+    private fun learnMicGain() {
+        if (IfaSettings.micBoost.isNotBlank()) return
+        val learned = MicGain.learn(IfaSettings.learnedMicGain, rawPeak)
+        if (learned != IfaSettings.learnedMicGain) {
+            AppLogger.log("Mic boost %.1fx → %.1fx (your loudest raw level was %.3f)".format(IfaSettings.learnedMicGain, learned, rawPeak))
+            IfaSettings.learnedMicGain = learned
+        }
+    }
+
     private fun onPlaybackFinished() {
         abandonFocus()
         if (phase != Phase.THINKING && phase != Phase.SPEAKING) return
@@ -282,6 +295,9 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 conn.send("start", "startTimeoutMs" to timeoutMs)
                 endpointer = Endpointer(silenceMs = vadSilenceMs + ENDPOINT_GRACE_MS)
                 peakLevel = 0f
+                rawPeak = 0f
+                gain = IfaSettings.micGain()
+                IfaState.setMicGain(gain)
                 listeningForFollowUp = !cue
                 streaming = true
                 updateMic()
@@ -353,8 +369,10 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         }
     }
 
-    private fun stream(chunk: ShortArray) {
+    private fun stream(raw: ShortArray) {
         val conn = connection ?: return
+        rawPeak = maxOf(rawPeak, MicGain.peak(raw))
+        val chunk = MicGain.apply(raw, gain)
         conn.sendAudio(chunk)
         val ep = endpointer ?: return
         val done = ep.process(chunk)

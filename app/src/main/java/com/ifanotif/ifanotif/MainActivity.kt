@@ -257,8 +257,13 @@ private fun TalkButton(phase: Phase, enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun MicMeter() {
     val level by IfaState.micLevel.collectAsState()
+    val gain by IfaState.micGain.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Mic level %.3f — stops by itself about a second after you go quiet".format(level), style = MaterialTheme.typography.bodySmall)
+        Text(
+            "Mic level %.3f (boost %.1fx%s) — stops about a second after you go quiet"
+                .format(level, gain, if (IfaSettings.micBoost.isBlank()) ", auto" else ""),
+            style = MaterialTheme.typography.bodySmall
+        )
         LinearProgressIndicator(progress = { (level * 8f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
     }
 }
@@ -407,6 +412,20 @@ private fun SettingsCard() {
                 label = { Text("Wake sensitivity threshold (optional)") },
                 placeholder = { Text("Same as the PC") },
                 supportingText = { Text("0–1. Lower wakes more easily. Watch the wake score while saying \"Ifa\".") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth()
+            )
+            var boost by remember { mutableStateOf(IfaSettings.micBoost) }
+            OutlinedTextField(
+                value = boost,
+                onValueChange = {
+                    boost = it
+                    IfaSettings.micBoost = it
+                },
+                label = { Text("Mic boost (optional)") },
+                placeholder = { Text("Auto (now %.1fx)".format(IfaSettings.learnedMicGain)) },
+                supportingText = { Text("1–16. Leave empty to learn it from how loud you speak. Raise it if Ifa misses what you say.") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
