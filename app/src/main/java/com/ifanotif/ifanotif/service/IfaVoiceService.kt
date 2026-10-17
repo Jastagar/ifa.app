@@ -71,6 +71,8 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     private var followUpSec = 5.0
     private var vadSilenceMs = 1500
     @Volatile private var endpointer: Endpointer? = null
+    @Volatile private var peakLevel = 0f
+    private var listeningForFollowUp = false
     private var ignoreUntilTurnEnd = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -228,13 +230,21 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 if (phase == Phase.LISTENING) setPhase(Phase.THINKING)
                 updateMic()
             }
-            "transcript" -> IfaState.addChat(true, message.optString("text"))
+            "transcript" -> {
+                IfaState.setProblem(null)
+                IfaState.addChat(true, message.optString("text"))
+            }
             "reply" -> if (!ignoreUntilTurnEnd) IfaState.addChat(false, message.optString("text"))
             "audio" -> if (!ignoreUntilTurnEnd) {
                 player.setSampleRate(message.optInt("sampleRate", 24_000))
                 requestFocus()
             }
-            "no_speech" -> followUp = false
+            "no_speech" -> {
+                followUp = false
+                val reason = message.optString("reason")
+                AppLogger.log("Ifa didn't catch that: $reason (loudest mic level on the phone: %.3f)".format(peakLevel))
+                if (reason != "cancelled" && !listeningForFollowUp) IfaState.setProblem("Ifa didn't catch that: $reason")
+            }
             "turn_end" -> {
                 if (ignoreUntilTurnEnd) {
                     ignoreUntilTurnEnd = false
@@ -271,6 +281,8 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
             if (phase == Phase.LISTENING && connection === conn) {
                 conn.send("start", "startTimeoutMs" to timeoutMs)
                 endpointer = Endpointer(silenceMs = vadSilenceMs + ENDPOINT_GRACE_MS)
+                peakLevel = 0f
+                listeningForFollowUp = !cue
                 streaming = true
                 updateMic()
             }
@@ -347,9 +359,16 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         val ep = endpointer ?: return
         val done = ep.process(chunk)
         IfaState.setMicLevel(ep.level)
+        if (ep.level > peakLevel) peakLevel = ep.level
         if (done) {
             endpointer = null
-            post { if (phase == Phase.LISTENING && connection === conn) conn.send("stop", "reason" to "silence") }
+            val peak = peakLevel
+            post {
+                if (phase == Phase.LISTENING && connection === conn) {
+                    AppLogger.log("Stopped listening: you went quiet (loudest mic level %.3f)".format(peak))
+                    conn.send("stop", "reason" to "silence")
+                }
+            }
         }
     }
 
