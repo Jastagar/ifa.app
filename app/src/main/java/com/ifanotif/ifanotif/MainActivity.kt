@@ -46,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,6 +66,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlin.math.roundToInt
 import com.ifanotif.ifanotif.api.RetrofitClient
 import com.ifanotif.ifanotif.ifa.ChatLine
 import com.ifanotif.ifanotif.ifa.IfaSettings
@@ -450,6 +452,24 @@ private fun SettingsCard() {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
+            var silence by remember { mutableStateOf(IfaSettings.silenceSec) }
+            Text("Pause before Ifa stops listening: %.1f s".format(silence), style = MaterialTheme.typography.bodyMedium)
+            Slider(
+                value = silence,
+                onValueChange = { silence = (it * 10).roundToInt() / 10f },
+                onValueChangeFinished = { IfaSettings.silenceSec = silence },
+                valueRange = 0.5f..4f
+            )
+            Text("Raise it if Ifa cuts you off mid-sentence; lower it for quicker replies.", style = MaterialTheme.typography.bodySmall)
+            var speech by remember { mutableStateOf(IfaSettings.speechThreshold) }
+            Text("Speech detection threshold: %.2f".format(speech), style = MaterialTheme.typography.bodyMedium)
+            Slider(
+                value = speech,
+                onValueChange = { speech = (it * 20).roundToInt() / 20f },
+                onValueChangeFinished = { IfaSettings.speechThreshold = speech },
+                valueRange = 0.2f..0.9f
+            )
+            Text("Lower it if soft words get treated as silence; raise it if background noise keeps Ifa listening.", style = MaterialTheme.typography.bodySmall)
             var boost by remember { mutableStateOf(IfaSettings.micBoost) }
             OutlinedTextField(
                 value = boost,

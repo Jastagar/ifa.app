@@ -70,12 +70,12 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     private var pcConsecutive = 2
     private var followUp = false
     private var followUpSec = 5.0
-    private var vadSilenceMs = 1500
+    private var followUpCue = false
     @Volatile private var endpointer: Endpointer? = null
     @Volatile private var peakLevel = 0f
     @Volatile private var gain = 1f
     @Volatile private var rawPeak = 0f
-    private var listeningForFollowUp = false
+    private var askedByIfa = false
     private var ignoreUntilTurnEnd = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -219,7 +219,6 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 pcThreshold = message.optDouble("wakeThreshold", 0.5).toFloat()
                 pcConsecutive = message.optInt("wakeConsecutive", 2).coerceAtLeast(1)
                 followUpSec = message.optDouble("followupSec", 5.0)
-                vadSilenceMs = message.optInt("vadSilenceMs", 1500)
                 val name = message.optString("name", connection?.host?.name ?: "PC")
                 retryDelayMs = 2_000
                 IfaState.setPcName(name)
@@ -243,11 +242,20 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 player.setSampleRate(message.optInt("sampleRate", 24_000))
                 requestFocus()
             }
+            "nudge" -> {
+                val urgent = message.optString("level") == "urgent"
+                IfaState.addChat(false, if (urgent) "🔔 Urgent notification. Ask \"what is it?\"" else "🔔 New notification. Ask \"what is it?\"")
+                if (urgent && IfaSettings.wakeScreen) wakeScreen()
+                if (phase == Phase.IDLE) {
+                    setPhase(Phase.THINKING)
+                    updateMic()
+                }
+            }
             "no_speech" -> {
                 followUp = false
                 val reason = message.optString("reason")
                 AppLogger.log("Ifa didn't catch that: $reason (loudest mic level on the phone: %.3f)".format(peakLevel))
-                if (reason != "cancelled" && !listeningForFollowUp) IfaState.setProblem("Ifa didn't catch that: $reason")
+                if (reason != "cancelled" && !askedByIfa) IfaState.setProblem("Ifa didn't catch that: $reason")
             }
             "turn_end" -> {
                 if (ignoreUntilTurnEnd) {
@@ -256,6 +264,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 }
                 followUp = message.optBoolean("followup", false)
                 followUpSec = message.optDouble("followupSec", followUpSec)
+                followUpCue = message.optBoolean("cue", false)
                 player.endOfTurn()
             }
             "error" -> {
@@ -282,23 +291,29 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     private fun onPlaybackFinished() {
         abandonFocus()
         if (phase != Phase.THINKING && phase != Phase.SPEAKING) return
-        if (followUp) startListening(timeoutMs = (followUpSec * 1000).toLong(), cue = false) else enterIdle()
+        if (followUp) startListening(timeoutMs = (followUpSec * 1000).toLong(), cue = followUpCue, askedByIfa = true) else enterIdle()
     }
 
-    private fun startListening(timeoutMs: Long, cue: Boolean) {
+    private fun startListening(timeoutMs: Long, cue: Boolean, askedByIfa: Boolean = false) {
         val conn = connection ?: return
         streaming = false
         setPhase(Phase.LISTENING)
         IfaState.setProblem(null)
         val begin = {
             if (phase == Phase.LISTENING && connection === conn) {
-                conn.send("start", "startTimeoutMs" to timeoutMs)
-                endpointer = Endpointer(silenceMs = vadSilenceMs + ENDPOINT_GRACE_MS)
+                val silenceMs = (IfaSettings.silenceSec * 1000).toInt()
+                conn.send(
+                    "start",
+                    "startTimeoutMs" to timeoutMs,
+                    "silenceMs" to silenceMs,
+                    "vadThreshold" to IfaSettings.speechThreshold.toDouble()
+                )
+                endpointer = Endpointer(silenceMs = silenceMs + ENDPOINT_GRACE_MS)
                 peakLevel = 0f
                 rawPeak = 0f
                 gain = IfaSettings.micGain()
                 IfaState.setMicGain(gain)
-                listeningForFollowUp = !cue
+                this.askedByIfa = askedByIfa
                 streaming = true
                 updateMic()
             }
@@ -618,7 +633,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         private const val WAKE_CHANNEL = "ifa_wake"
         private const val SERVICE_NOTIFICATION_ID = 1
         private const val WAKE_NOTIFICATION_ID = 2
-        private const val ENDPOINT_GRACE_MS = 300
+        private const val ENDPOINT_GRACE_MS = 500
         private const val CODE_HINT =
             "Enter the pairing code shown in the Ifa launcher (Phone app row) or printed in Ifa's console as \"Pairing code: …\"."
 

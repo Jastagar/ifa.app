@@ -42,6 +42,16 @@ object IfaSettings {
 
     fun micGain(): Float = micBoost.toFloatOrNull()?.coerceIn(MicGain.MIN, MicGain.MAX) ?: learnedMicGain
 
+    /** How long a pause ends what you're saying. */
+    var silenceSec: Float
+        get() = prefs.getFloat("silence_sec", 1.5f)
+        set(value) = prefs.edit().putFloat("silence_sec", value.coerceIn(0.3f, 5f)).apply()
+
+    /** Ifa's VAD threshold for phone audio; lower keeps soft speech from counting as silence. */
+    var speechThreshold: Float
+        get() = prefs.getFloat("speech_threshold", 0.5f)
+        set(value) = prefs.edit().putFloat("speech_threshold", value.coerceIn(0.1f, 0.95f)).apply()
+
     var wakeScreen: Boolean
         get() = prefs.getBoolean("wake_screen", true)
         set(value) = prefs.edit().putBoolean("wake_screen", value).apply()
