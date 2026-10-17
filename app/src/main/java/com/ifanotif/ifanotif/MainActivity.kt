@@ -353,7 +353,7 @@ private fun SettingsCard() {
                 value = code,
                 onValueChange = { code = it },
                 label = { Text("Pairing code") },
-                supportingText = { Text("Printed by Ifa on the PC at startup: \"[phone] … Pairing code: 123456\"") },
+                supportingText = { Text("Shown in the Ifa launcher under \"Phone app\", and printed in Ifa's console at startup. Ifa makes it for you.") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()

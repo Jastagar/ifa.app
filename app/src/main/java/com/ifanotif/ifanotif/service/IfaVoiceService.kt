@@ -128,7 +128,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         if (stopped || connection != null) return
         val code = IfaSettings.pairingCode
         if (code.isBlank()) {
-            IfaState.setProblem("Enter the pairing code Ifa prints on the PC.")
+            IfaState.setProblem(CODE_HINT)
             setPhase(Phase.SEARCHING)
             scheduleConnect(3_000)
             return
@@ -157,6 +157,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         connection?.close()
         connection = null
         retryDelayMs = 2_000
+        IfaState.setProblem(null)
         resetTurn()
         IfaState.setPcName(null)
         setPhase(Phase.SEARCHING)
@@ -176,18 +177,25 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         }
     }
 
-    override fun onClosed(connection: IfaConnection, reason: String, wrongPairingCode: Boolean) = post {
+    override fun onClosed(connection: IfaConnection, reason: String, httpCode: Int?) = post {
         if (connection !== this.connection) return@post
         this.connection = null
         releaseWifiLock()
         resetTurn()
         IfaState.setPcName(null)
-        if (wrongPairingCode) {
-            IfaState.setProblem("Wrong pairing code. Check the code Ifa prints on the PC.")
-            scheduleConnect(10_000)
-        } else {
-            AppLogger.log("Ifa disconnected: $reason")
-            scheduleConnect(1_000)
+        when (httpCode) {
+            401 -> {
+                IfaState.setProblem("Wrong pairing code \"${IfaSettings.pairingCode}\". $CODE_HINT")
+                scheduleConnect(30_000)
+            }
+            429 -> {
+                IfaState.setProblem("Too many wrong codes, the PC is ignoring this phone for a minute. $CODE_HINT")
+                scheduleConnect(65_000)
+            }
+            else -> {
+                AppLogger.log("Ifa disconnected: $reason")
+                scheduleConnect(1_000)
+            }
         }
         setPhase(Phase.SEARCHING)
         updateMic()
@@ -547,6 +555,8 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         private const val WAKE_CHANNEL = "ifa_wake"
         private const val SERVICE_NOTIFICATION_ID = 1
         private const val WAKE_NOTIFICATION_ID = 2
+        private const val CODE_HINT =
+            "Enter the pairing code shown in the Ifa launcher (Phone app row) or printed in Ifa's console as \"Pairing code: …\"."
 
         @Volatile var instance: IfaVoiceService? = null
             private set

@@ -25,7 +25,7 @@ class IfaConnection(
     interface Listener {
         fun onMessage(connection: IfaConnection, message: JSONObject)
         fun onAudio(connection: IfaConnection, pcm16: ByteArray)
-        fun onClosed(connection: IfaConnection, reason: String, wrongPairingCode: Boolean)
+        fun onClosed(connection: IfaConnection, reason: String, httpCode: Int?)
     }
 
     private var socket: WebSocket? = null
@@ -50,7 +50,7 @@ class IfaConnection(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                listener.onClosed(this@IfaConnection, reason.ifBlank { "closed" }, false)
+                listener.onClosed(this@IfaConnection, reason.ifBlank { "closed" }, null)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -58,7 +58,7 @@ class IfaConnection(
                 listener.onClosed(
                     this@IfaConnection,
                     if (code != null) "HTTP $code" else (t.message ?: t.javaClass.simpleName),
-                    code == 401
+                    code
                 )
             }
         })
