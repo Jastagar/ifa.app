@@ -3,6 +3,8 @@ package com.ifanotif.ifanotif
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -70,6 +73,7 @@ import com.ifanotif.ifanotif.ifa.Phase
 import com.ifanotif.ifanotif.service.IfaVoiceService
 import com.ifanotif.ifanotif.ui.theme.IfanotifTheme
 import com.ifanotif.ifanotif.utils.AppLogger
+import com.ifanotif.ifanotif.utils.CrashLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -147,16 +151,22 @@ fun IfaScreen(modifier: Modifier = Modifier) {
         if (!IfaVoiceService.isRunning && IfaSettings.pairingCode.isNotBlank()) startIfa()
     }
 
-    LazyColumn(
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
+            .imePadding()
+            .padding(horizontal = 16.dp)
+    ) {
+    LazyColumn(
+        modifier = Modifier.weight(1f),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Spacer(Modifier.size(8.dp))
             Text("Ifa", style = MaterialTheme.typography.headlineMedium)
         }
+
+        item { LastCrash() }
 
         item {
             StatusCard(
@@ -179,8 +189,6 @@ fun IfaScreen(modifier: Modifier = Modifier) {
 
         item { Conversation(chat) }
 
-        item { TextInput(enabled = phase == Phase.IDLE) }
-
         item {
             TextButton(onClick = { showSettings = !showSettings }) {
                 Text(if (showSettings) "Hide settings" else "Settings")
@@ -196,6 +204,32 @@ fun IfaScreen(modifier: Modifier = Modifier) {
         if (showLogs) item { Logs() }
 
         item { Spacer(Modifier.size(24.dp)) }
+    }
+    TextInput(enabled = phase == Phase.IDLE)
+    Spacer(Modifier.size(8.dp))
+    }
+}
+
+@Composable
+private fun LastCrash() {
+    val context = LocalContext.current
+    var crash by remember { mutableStateOf(CrashLog.read()) }
+    val text = crash ?: return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Ifa crashed last time", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+            Text(text.lines().take(8).joinToString("\n"), style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Ifa crash", text))
+                }) { Text("Copy") }
+                OutlinedButton(onClick = {
+                    CrashLog.clear()
+                    crash = null
+                }) { Text("Dismiss") }
+            }
+        }
     }
 }
 

@@ -156,7 +156,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     private fun scheduleConnect(delayMs: Long) {
         pendingConnect?.cancel(false)
         pendingConnect = if (worker.isShutdown) null else runCatching {
-            worker.schedule({ tryConnect() }, delayMs, TimeUnit.MILLISECONDS)
+            worker.schedule(guarded { tryConnect() }, delayMs, TimeUnit.MILLISECONDS)
         }.getOrNull()
     }
 
@@ -346,6 +346,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     fun sendText(text: String) = post {
         val conn = connection ?: return@post IfaState.setProblem("Not connected to Ifa yet.")
         if (phase != Phase.IDLE) return@post IfaState.setProblem("Wait for Ifa to finish.")
+        IfaState.setProblem(null)
         IfaState.addChat(true, text)
         conn.send("text", "text" to text)
         setPhase(Phase.THINKING)
@@ -591,11 +592,19 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     }
 
     private fun post(block: () -> Unit) {
-        if (!worker.isShutdown) runCatching { worker.execute(block) }
+        if (!worker.isShutdown) runCatching { worker.execute(guarded(block)) }
     }
 
     private fun schedule(delayMs: Long, block: () -> Unit) {
-        if (!worker.isShutdown) runCatching { worker.schedule(block, delayMs, TimeUnit.MILLISECONDS) }
+        if (!worker.isShutdown) runCatching { worker.schedule(guarded(block), delayMs, TimeUnit.MILLISECONDS) }
+    }
+
+    private fun guarded(block: () -> Unit): Runnable = Runnable {
+        try {
+            block()
+        } catch (e: Exception) {
+            AppLogger.log("Ifa service error: ${e.javaClass.simpleName}: ${e.message} at ${e.stackTrace.firstOrNull()}")
+        }
     }
 
     // endregion

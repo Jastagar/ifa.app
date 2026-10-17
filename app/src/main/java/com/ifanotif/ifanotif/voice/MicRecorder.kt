@@ -9,23 +9,26 @@ import com.ifanotif.ifanotif.utils.AppLogger
 class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
 
     @Volatile private var running = false
-    private var thread: Thread? = null
+    @Volatile private var thread: Thread? = null
 
     val isRunning: Boolean get() = running
 
     @SuppressLint("MissingPermission")
     @Synchronized
     fun start() {
-        if (running) return
+        if (running && thread != null) return
         running = true
-        thread = Thread({ record() }, "ifa-mic").also { it.start() }
+        val recording = Thread({ record() }, "ifa-mic")
+        thread = recording
+        recording.start()
     }
 
     @Synchronized
     fun stop() {
         running = false
-        thread?.join(500)
+        val old = thread
         thread = null
+        old?.join(500)
     }
 
     @SuppressLint("MissingPermission")
@@ -41,19 +44,19 @@ class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
             )
         } catch (e: Exception) {
             AppLogger.log("Mic unavailable: ${e.message}")
-            running = false
+            if (Thread.currentThread() === thread) running = false
             return
         }
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
             AppLogger.log("Mic unavailable (is another app recording?)")
             recorder.release()
-            running = false
+            if (Thread.currentThread() === thread) running = false
             return
         }
 
         recorder.startRecording()
         try {
-            while (running) {
+            while (running && Thread.currentThread() === thread) {
                 val chunk = ShortArray(CHUNK_SAMPLES)
                 var filled = 0
                 while (running && filled < CHUNK_SAMPLES) {
@@ -61,14 +64,20 @@ class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
                     if (read < 0) throw IllegalStateException("AudioRecord.read returned $read")
                     filled += read
                 }
-                if (filled == CHUNK_SAMPLES) onChunk(chunk)
+                if (filled == CHUNK_SAMPLES) {
+                    try {
+                        onChunk(chunk)
+                    } catch (e: Exception) {
+                        AppLogger.log("Mic chunk error: ${e.javaClass.simpleName}: ${e.message}")
+                    }
+                }
             }
         } catch (e: Exception) {
             AppLogger.log("Mic stopped: ${e.message}")
         } finally {
-            recorder.stop()
+            runCatching { recorder.stop() }
             recorder.release()
-            running = false
+            if (Thread.currentThread() === thread) running = false
         }
     }
 
