@@ -21,6 +21,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.ifanotif.ifanotif.MainActivity
 import com.ifanotif.ifanotif.R
+import com.ifanotif.ifanotif.ifa.Enrollment
 import com.ifanotif.ifanotif.ifa.IfaConnection
 import com.ifanotif.ifanotif.ifa.IfaDiscovery
 import com.ifanotif.ifanotif.ifa.IfaSettings
@@ -223,12 +224,34 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 retryDelayMs = 2_000
                 IfaState.setPcName(name)
                 IfaState.setProblem(null)
+                IfaState.setVoiceSources(message.optJSONArray("voiceSources").toStrings())
                 AppLogger.log("Connected to Ifa on $name")
                 acquireWifiLock()
                 enterIdle()
                 pushNotificationSettings()
             }
             "notification_settings" -> AppLogger.log("Ifa is using your notification settings")
+            "enroll_ready" -> IfaState.setEnrollment(
+                Enrollment(phrases = message.optJSONArray("phrases").toStrings(), status = "Tap Record, then read the phrase aloud.")
+            )
+            "enroll_sample" -> IfaState.enrollment.value?.let { current ->
+                val ok = message.optBoolean("ok")
+                val next = if (ok) current.index + 1 else current.index
+                if (ok && next >= current.phrases.size) {
+                    IfaState.setEnrollment(current.copy(index = next, status = "Learning your voice…"))
+                    connection?.send("enroll_finish")
+                } else {
+                    IfaState.setEnrollment(current.copy(index = next, status = message.optString("message")))
+                }
+            }
+            "enroll_done" -> {
+                IfaState.setVoiceSources(message.optJSONArray("sources").toStrings())
+                val result = message.optString("message")
+                AppLogger.log("Voice: $result")
+                IfaState.setEnrollment(
+                    (IfaState.enrollment.value ?: Enrollment()).copy(finished = true, ok = message.optBoolean("ok"), status = result)
+                )
+            }
             "end_of_speech" -> {
                 if (streaming) learnMicGain()
                 streaming = false
@@ -296,7 +319,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         if (followUp) startListening(timeoutMs = (followUpSec * 1000).toLong(), cue = followUpCue, askedByIfa = true) else enterIdle()
     }
 
-    private fun startListening(timeoutMs: Long, cue: Boolean, askedByIfa: Boolean = false) {
+    private fun startListening(timeoutMs: Long, cue: Boolean, askedByIfa: Boolean = false, enroll: Boolean = false) {
         val conn = connection ?: return
         streaming = false
         setPhase(Phase.LISTENING)
@@ -308,7 +331,8 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                     "start",
                     "startTimeoutMs" to timeoutMs,
                     "silenceMs" to silenceMs,
-                    "vadThreshold" to IfaSettings.speechThreshold.toDouble()
+                    "vadThreshold" to IfaSettings.speechThreshold.toDouble(),
+                    "enroll" to enroll
                 )
                 endpointer = Endpointer(silenceMs = silenceMs + ENDPOINT_GRACE_MS)
                 peakLevel = 0f
@@ -370,6 +394,34 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         updateMic()
     }
 
+    fun startEnrollment() = post {
+        val conn = connection ?: return@post IfaState.setProblem("Connect to Ifa first.")
+        if (phase != Phase.IDLE) return@post IfaState.setProblem("Wait for Ifa to finish.")
+        IfaState.setEnrollment(Enrollment())
+        conn.send("enroll_begin")
+        updateMic()
+    }
+
+    fun recordEnrollPhrase() = post {
+        val current = IfaState.enrollment.value ?: return@post
+        if (current.finished || current.index >= current.phrases.size || phase != Phase.IDLE) return@post
+        IfaState.setEnrollment(current.copy(status = "Listening… read the phrase now."))
+        startListening(timeoutMs = 8_000, cue = true, enroll = true)
+    }
+
+    fun cancelEnrollment() = post {
+        val current = IfaState.enrollment.value
+        if (current != null && !current.finished) connection?.send("enroll_cancel")
+        IfaState.setEnrollment(null)
+        updateMic()
+    }
+
+    fun forgetVoice() = post {
+        connection?.send("enroll_forget") ?: IfaState.setProblem("Connect to Ifa first.")
+    }
+
+    private fun enrolling(): Boolean = IfaState.enrollment.value?.finished == false
+
     fun pushNotificationSettings(): Boolean =
         connection?.send(IfaSettings.notificationSettingsMessage()) ?: false
 
@@ -385,7 +437,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     private fun onMicChunk(chunk: ShortArray) {
         when (phase) {
             Phase.LISTENING -> if (streaming) stream(chunk)
-            Phase.IDLE -> detectWake(chunk)
+            Phase.IDLE -> if (!enrolling()) detectWake(chunk)
             else -> Unit
         }
     }
@@ -660,3 +712,6 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         }
     }
 }
+
+private fun org.json.JSONArray?.toStrings(): List<String> =
+    if (this == null) emptyList() else (0 until length()).map { getString(it) }

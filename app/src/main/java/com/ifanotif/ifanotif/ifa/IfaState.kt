@@ -15,6 +15,15 @@ enum class Phase(val label: String) {
 
 data class ChatLine(val fromUser: Boolean, val text: String)
 
+/** Teaching Ifa your voice: which phrase is next and how it went. */
+data class Enrollment(
+    val phrases: List<String> = emptyList(),
+    val index: Int = 0,
+    val status: String = "Getting ready…",
+    val finished: Boolean = false,
+    val ok: Boolean = false,
+)
+
 /** What the service is doing, observed by the UI. */
 object IfaState {
     private val _phase = MutableStateFlow(Phase.STOPPED)
@@ -72,6 +81,21 @@ object IfaState {
 
     fun resetWakePeak() {
         _wakePeak.value = 0f
+    }
+
+    private val _enrollment = MutableStateFlow<Enrollment?>(null)
+    val enrollment = _enrollment.asStateFlow()
+
+    /** Which mics Ifa has learned your voice from ("pc", "phone"). Empty: Ifa listens to everyone. */
+    private val _voiceSources = MutableStateFlow<List<String>>(emptyList())
+    val voiceSources = _voiceSources.asStateFlow()
+
+    fun setEnrollment(enrollment: Enrollment?) {
+        _enrollment.value = enrollment
+    }
+
+    fun setVoiceSources(sources: List<String>) {
+        _voiceSources.value = sources
     }
 
     private const val MAX_CHAT = 100

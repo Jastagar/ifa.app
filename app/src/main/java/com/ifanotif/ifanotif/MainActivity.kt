@@ -436,6 +436,7 @@ private fun SettingsCard() {
 
             HorizontalDivider()
             Text("Voice", style = MaterialTheme.typography.titleSmall)
+            YourVoice()
             SettingSwitch("Wake word \"Ifa\"", "Listens on the phone; nothing is sent until it hears the wake word.", wakeWord) {
                 wakeWord = it
                 IfaSettings.wakeWordEnabled = it
@@ -562,6 +563,60 @@ private fun SettingsCard() {
                             }
                         }
                     }) { Text("Test") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun YourVoice() {
+    val sources by IfaState.voiceSources.collectAsState()
+    val enrollment by IfaState.enrollment.collectAsState()
+    val phase by IfaState.phase.collectAsState()
+    val connected = phase !in listOf(Phase.STOPPED, Phase.SEARCHING, Phase.CONNECTING)
+    val where = sources.joinToString(" and ") { if (it == "pc") "the PC mic" else "this phone" }
+
+    Text("Your voice", style = MaterialTheme.typography.bodyMedium)
+    Text(
+        if (sources.isEmpty()) "Not set up: Ifa listens to everyone, including the TV."
+        else "Ifa only listens to you and ignores other voices. Learned from $where.",
+        style = MaterialTheme.typography.bodySmall
+    )
+    val current = enrollment
+    if (current == null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { IfaVoiceService.instance?.startEnrollment() }, enabled = connected && phase == Phase.IDLE) {
+                Text(if ("phone" in sources) "Teach it again" else "Teach Ifa my voice")
+            }
+            if (sources.isNotEmpty()) {
+                TextButton(onClick = { IfaVoiceService.instance?.forgetVoice() }, enabled = connected) { Text("Forget my voice") }
+            }
+        }
+        if (!connected) Text("Connect to Ifa first.", style = MaterialTheme.typography.bodySmall)
+        return
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val phrase = current.phrases.getOrNull(current.index)
+            if (!current.finished && phrase != null) {
+                Text("Phrase ${current.index + 1} of ${current.phrases.size}", style = MaterialTheme.typography.labelMedium)
+                Text("\u201C$phrase\u201D", style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
+                current.status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (current.finished && !current.ok) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (current.finished) {
+                    Button(onClick = { IfaVoiceService.instance?.cancelEnrollment() }) { Text("Done") }
+                } else {
+                    Button(
+                        onClick = { IfaVoiceService.instance?.recordEnrollPhrase() },
+                        enabled = phrase != null && phase == Phase.IDLE
+                    ) { Text(if (phase == Phase.LISTENING) "Listening…" else "Record") }
+                    TextButton(onClick = { IfaVoiceService.instance?.cancelEnrollment() }) { Text("Cancel") }
                 }
             }
         }
