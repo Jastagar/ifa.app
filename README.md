@@ -12,6 +12,8 @@ Talk to Ifa from your phone whenever your PC is running Ifa on the same Wi-Fi.
 - **Apps tab.** Every installed app with a switch: on means its notifications go to Ifa. For each app that's on, write what matters ("messages from Mom or my manager are important; group chats aren't"). Ifa's urgency check reads that note as your instruction when it decides whether to interrupt you. Messaging apps start on, everything else off. Settings, Notifications keeps the timing: how long to group a sender's messages, how long they count as new, queue sizes, and how long Ifa listens after a nudge.
 - **Type to Ifa** from the text box.
 
+Design notes and the full WebSocket protocol: `docs/design/phone-app.md` in the Ifa repo.
+
 ## Setup
 
 1. On the PC, start Ifa. It prints a line like:
