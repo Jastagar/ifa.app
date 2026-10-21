@@ -8,6 +8,7 @@ Talk to Ifa from your phone whenever your PC is running Ifa on the same Wi-Fi.
 - **Follow-ups.** After Ifa answers, the phone listens for a few seconds without the wake word, like on the PC.
 - **Screen comes up.** When the wake word fires, the screen turns on and shows Ifa, even over the lock screen. The screen stays on while the app is open.
 - **Notifications go straight to Ifa.** No Spring Boot bridge needed.
+- **Notification settings live on the phone.** Settings, Notifications: choose High / Normal / Low / Off per app (and for all other apps), how long to group a sender's messages, how long they count as new, queue sizes, and how long Ifa listens after a nudge. The app sends them to Ifa every time it connects and whenever you change one.
 - **Type to Ifa** from the text box.
 
 ## Setup

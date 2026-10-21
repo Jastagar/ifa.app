@@ -65,7 +65,12 @@ class NotificationTrackerService : NotificationListenerService() {
         AppLogger.log("Title   : $title")
         AppLogger.log("Message : $text")
 
-        if (IfaSettings.forwardNotifications) {
+        IfaSettings.rememberApp(sbn.packageName, appName)
+        val priority = IfaSettings.priorityFor(sbn.packageName)
+
+        if (IfaSettings.forwardNotifications && priority == "off") {
+            AppLogger.log("Not sent: $appName is off in Ifa's notification settings")
+        } else if (IfaSettings.forwardNotifications) {
             val sent = IfaVoiceService.instance?.forwardNotification(
                 JSONObject()
                     .put("packageName", request.packageName)
@@ -73,8 +78,9 @@ class NotificationTrackerService : NotificationListenerService() {
                     .put("title", request.title)
                     .put("text", request.text)
                     .put("receivedAt", request.receivedAt)
+                    .put("priority", priority)
             ) ?: false
-            AppLogger.log(if (sent) "➡️ Sent to Ifa" else "Ifa not connected; notification not sent")
+            AppLogger.log(if (sent) "➡️ Sent to Ifa ($priority)" else "Ifa not connected; notification not sent")
         }
 
         if (IfaSettings.legacyBackendEnabled) upload(request)

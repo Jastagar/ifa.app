@@ -226,7 +226,9 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 AppLogger.log("Connected to Ifa on $name")
                 acquireWifiLock()
                 enterIdle()
+                pushNotificationSettings()
             }
+            "notification_settings" -> AppLogger.log("Ifa is using your notification settings")
             "end_of_speech" -> {
                 if (streaming) learnMicGain()
                 streaming = false
@@ -367,6 +369,9 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         setPhase(Phase.THINKING)
         updateMic()
     }
+
+    fun pushNotificationSettings(): Boolean =
+        connection?.send(IfaSettings.notificationSettingsMessage()) ?: false
 
     fun forwardNotification(payload: JSONObject): Boolean {
         val conn = connection ?: return false

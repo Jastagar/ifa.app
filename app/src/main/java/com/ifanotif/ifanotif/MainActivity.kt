@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -40,6 +41,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -524,6 +526,7 @@ private fun SettingsCard() {
                 onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Grant notification access") }
+            if (forward) NotificationRules()
 
             SettingSwitch("Also send to the backend URL", "The old Spring Boot bridge. Not needed when Ifa is connected.", legacy) {
                 legacy = it
@@ -564,6 +567,100 @@ private fun SettingsCard() {
         }
     }
 }
+
+@Composable
+private fun NotificationRules() {
+    val context = LocalContext.current
+    val sync = { IfaVoiceService.instance?.pushNotificationSettings() }
+    var fallback by remember { mutableStateOf(IfaSettings.defaultAppPriority) }
+    var priorities by remember { mutableStateOf(IfaSettings.appPriorities()) }
+    var showApps by remember { mutableStateOf(false) }
+    val apps = remember {
+        val seen = IfaSettings.seenApps()
+        (seen.keys + IfaSettings.appPriorities().keys).distinct()
+            .map { pkg -> pkg to (seen[pkg] ?: appLabel(context, pkg)) }
+            .sortedBy { it.second.lowercase() }
+    }
+
+    Text("Which apps matter", style = MaterialTheme.typography.bodyMedium)
+    Text(
+        "High: Ifa nudges you and leans toward calling it urgent. Normal: nudges you, urgent only if it clearly is. " +
+            "Low: kept quietly, you hear it only if you ask. Off: never sent to Ifa.",
+        style = MaterialTheme.typography.bodySmall
+    )
+    PriorityPicker("All other apps", fallback) {
+        fallback = it
+        IfaSettings.defaultAppPriority = it
+    }
+    TextButton(onClick = { showApps = !showApps }) {
+        Text(if (showApps) "Hide apps" else "Set it per app (${apps.size})")
+    }
+    if (showApps) {
+        if (apps.isEmpty()) Text("Apps show up here after they post a notification.", style = MaterialTheme.typography.bodySmall)
+        apps.forEach { (pkg, label) ->
+            PriorityPicker(label, priorities[pkg] ?: fallback) {
+                IfaSettings.setAppPriority(pkg, it)
+                priorities = IfaSettings.appPriorities()
+            }
+        }
+    }
+
+    SettingSlider("Group a sender's messages for", IfaSettings.notifSettleSec, 1f..30f, { "%.0f s".format(it) },
+        "Wait this long after someone's last message before Ifa judges the whole group. Raise it for people who send many short messages.") {
+        IfaSettings.notifSettleSec = it.roundToInt().toFloat(); sync()
+    }
+    SettingSlider("Keep as new for", IfaSettings.notifTtlSec, 30f..600f, { "%.0f s".format(it) },
+        "After this, a notification moves to the older list. Ask Ifa for older notifications to hear those.") {
+        IfaSettings.notifTtlSec = (it / 10).roundToInt() * 10f; sync()
+    }
+    SettingSlider("New notifications kept", IfaSettings.notifMaxRecent.toFloat(), 1f..20f, { it.roundToInt().toString() },
+        "When more arrive, the oldest move to the older list.") {
+        IfaSettings.notifMaxRecent = it.roundToInt(); sync()
+    }
+    SettingSlider("Older notifications kept", IfaSettings.notifMaxDiscarded.toFloat(), 10f..200f, { it.roundToInt().toString() }, "") {
+        IfaSettings.notifMaxDiscarded = it.roundToInt(); sync()
+    }
+    SettingSlider("Listen after a nudge for", IfaSettings.notifListenSec, 2f..30f, { "%.0f s".format(it) },
+        "How long Ifa waits for you to say \"what is it?\" without the wake word.") {
+        IfaSettings.notifListenSec = it.roundToInt().toFloat(); sync()
+    }
+}
+
+@Composable
+private fun PriorityPicker(label: String, selected: String, onSelect: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            IfaSettings.PRIORITIES.forEach { priority ->
+                FilterChip(
+                    selected = priority == selected,
+                    onClick = { onSelect(priority) },
+                    label = { Text(priority.replaceFirstChar { it.uppercase() }) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingSlider(
+    label: String,
+    initial: Float,
+    range: ClosedFloatingPointRange<Float>,
+    format: (Float) -> String,
+    help: String,
+    onDone: (Float) -> Unit,
+) {
+    var value by remember { mutableStateOf(initial.coerceIn(range)) }
+    Text("$label: ${format(value)}", style = MaterialTheme.typography.bodyMedium)
+    Slider(value = value, onValueChange = { value = it }, valueRange = range, onValueChangeFinished = { onDone(value) })
+    if (help.isNotEmpty()) Text(help, style = MaterialTheme.typography.bodySmall)
+}
+
+private fun appLabel(context: Context, packageName: String): String = runCatching {
+    val pm = context.packageManager
+    pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+}.getOrDefault(packageName)
 
 @Composable
 private fun SettingSwitch(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit) {
