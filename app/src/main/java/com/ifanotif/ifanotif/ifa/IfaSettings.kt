@@ -5,6 +5,9 @@ import android.content.SharedPreferences
 import com.ifanotif.ifanotif.voice.MicGain
 import org.json.JSONObject
 
+/** Whether an app's notifications go to Ifa, and what you told Ifa matters in them. */
+data class AppRule(val allowed: Boolean, val note: String)
+
 object IfaSettings {
     private const val PREFS_NAME = "ifa_settings"
 
@@ -63,46 +66,46 @@ object IfaSettings {
 
     // Notification settings. The phone owns them and sends them to Ifa on every connect.
 
-    val PRIORITIES = listOf("high", "normal", "low", "off")
-
-    private val DEFAULT_APP_PRIORITIES = mapOf(
-        "com.whatsapp" to "high",
-        "com.whatsapp.w4b" to "high",
-        "org.telegram.messenger" to "high",
-        "com.google.android.apps.messaging" to "high",
-        "com.google.android.dialer" to "high",
-        "com.samsung.android.dialer" to "high",
-        "com.google.android.gm" to "normal",
-        "com.Slack" to "normal",
+    /** Apps whose notifications go to Ifa until you change it in the Apps tab. Everything else starts off. */
+    private val DEFAULT_ALLOWED = setOf(
+        "com.whatsapp",
+        "com.whatsapp.w4b",
+        "org.telegram.messenger",
+        "com.google.android.apps.messaging",
+        "com.google.android.dialer",
+        "com.samsung.android.dialer",
+        "com.samsung.android.messaging",
+        "com.google.android.gm",
+        "com.Slack",
     )
 
-    private const val MAX_SEEN_APPS = 80
+    const val MAX_NOTE_CHARS = 300
 
-    /** For apps without their own setting. */
-    var defaultAppPriority: String
-        get() = prefs.getString("default_app_priority", "low")!!
-        set(value) = prefs.edit().putString("default_app_priority", value).apply()
+    @Volatile private var rulesCache: Map<String, AppRule>? = null
 
-    fun appPriorities(): Map<String, String> =
-        prefs.getString("app_priorities", null)?.let(::readMap) ?: DEFAULT_APP_PRIORITIES
+    /** Rules you've set in the Apps tab, by package name. Apps not in here use [defaultRule]. */
+    fun appRules(): Map<String, AppRule> = rulesCache ?: loadRules().also { rulesCache = it }
 
-    fun setAppPriority(packageName: String, priority: String) {
-        val updated = appPriorities().toMutableMap().apply { put(packageName, priority) }
-        prefs.edit().putString("app_priorities", JSONObject(updated as Map<*, *>).toString()).apply()
+    fun defaultRule(packageName: String) = AppRule(allowed = packageName in DEFAULT_ALLOWED, note = "")
+
+    fun appRule(packageName: String): AppRule = appRules()[packageName] ?: defaultRule(packageName)
+
+    @Synchronized
+    fun setAppRule(packageName: String, rule: AppRule) {
+        val updated = appRules().toMutableMap().apply { put(packageName, rule.copy(note = rule.note.take(MAX_NOTE_CHARS))) }
+        rulesCache = updated
+        val json = JSONObject()
+        updated.forEach { (pkg, r) -> json.put(pkg, JSONObject().put("allowed", r.allowed).put("note", r.note)) }
+        prefs.edit().putString("app_rules", json.toString()).apply()
     }
 
-    fun priorityFor(packageName: String): String = appPriorities()[packageName] ?: defaultAppPriority
-
-    /** Apps that have posted a notification, package name to label, so the settings can list them. */
-    fun seenApps(): Map<String, String> = prefs.getString("seen_apps", null)?.let(::readMap) ?: emptyMap()
-
-    fun rememberApp(packageName: String, label: String) {
-        val seen = seenApps()
-        if (seen[packageName] == label) return
-        val updated = LinkedHashMap(seen).apply { remove(packageName); put(packageName, label) }
-        while (updated.size > MAX_SEEN_APPS) updated.remove(updated.keys.first())
-        prefs.edit().putString("seen_apps", JSONObject(updated as Map<*, *>).toString()).apply()
-    }
+    private fun loadRules(): Map<String, AppRule> = runCatching {
+        val json = JSONObject(prefs.getString("app_rules", null) ?: return emptyMap())
+        json.keys().asSequence().associateWith { pkg ->
+            val r = json.getJSONObject(pkg)
+            AppRule(allowed = r.optBoolean("allowed", false), note = r.optString("note", ""))
+        }
+    }.getOrDefault(emptyMap())
 
     /** Wait this long after a sender's last message before Ifa judges the group. */
     var notifSettleSec: Float
@@ -134,11 +137,6 @@ object IfaSettings {
         .put("maxRecent", notifMaxRecent)
         .put("maxDiscarded", notifMaxDiscarded)
         .put("listenSec", notifListenSec.toDouble())
-
-    private fun readMap(json: String): Map<String, String> = runCatching {
-        val obj = JSONObject(json)
-        obj.keys().asSequence().associateWith { obj.getString(it) }
-    }.getOrDefault(emptyMap())
 
     /** The old Spring Boot bridge (POST /api/v1/notifications). Off unless turned on. */
     var legacyBackendEnabled: Boolean

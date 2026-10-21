@@ -9,7 +9,7 @@ Talk to Ifa from your phone whenever your PC is running Ifa on the same Wi-Fi.
 - **Screen comes up.** When the wake word fires, the screen turns on and shows Ifa, even over the lock screen. The screen stays on while the app is open.
 - **Notifications go straight to Ifa.** No Spring Boot bridge needed.
 - **Only your voice.** Settings, Voice, **Teach Ifa my voice**: read 6 phrases and Ifa ignores every other voice (TV, music, other people) from then on. The check runs on the PC, so it covers the phone and the PC mic. Enroll on the PC too (launcher Setup) since the two mics sound different. **Forget my voice** turns it off.
-- **Notification settings live on the phone.** Settings, Notifications: choose High / Normal / Low / Off per app (and for all other apps), how long to group a sender's messages, how long they count as new, queue sizes, and how long Ifa listens after a nudge. The app sends them to Ifa every time it connects and whenever you change one.
+- **Apps tab.** Every installed app with a switch: on means its notifications go to Ifa. For each app that's on, write what matters ("messages from Mom or my manager are important; group chats aren't"). Ifa's urgency check reads that note as your instruction when it decides whether to interrupt you. Messaging apps start on, everything else off. Settings, Notifications keeps the timing: how long to group a sender's messages, how long they count as new, queue sizes, and how long Ifa listens after a nudge.
 - **Type to Ifa** from the text box.
 
 ## Setup

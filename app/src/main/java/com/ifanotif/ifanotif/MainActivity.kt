@@ -41,7 +41,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +52,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Tab
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -91,8 +95,17 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             IfanotifTheme {
-                Scaffold { padding ->
-                    IfaScreen(modifier = Modifier.padding(padding))
+                var tab by rememberSaveable { mutableIntStateOf(0) }
+                Scaffold(
+                    topBar = {
+                        TabRow(selectedTabIndex = tab, modifier = Modifier.statusBarsPadding()) {
+                            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Ifa") })
+                            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Apps") })
+                        }
+                    }
+                ) { padding ->
+                    if (tab == 0) IfaScreen(modifier = Modifier.padding(padding))
+                    else AppsScreen(modifier = Modifier.padding(padding))
                 }
             }
         }
@@ -625,41 +638,12 @@ private fun YourVoice() {
 
 @Composable
 private fun NotificationRules() {
-    val context = LocalContext.current
     val sync = { IfaVoiceService.instance?.pushNotificationSettings() }
-    var fallback by remember { mutableStateOf(IfaSettings.defaultAppPriority) }
-    var priorities by remember { mutableStateOf(IfaSettings.appPriorities()) }
-    var showApps by remember { mutableStateOf(false) }
-    val apps = remember {
-        val seen = IfaSettings.seenApps()
-        (seen.keys + IfaSettings.appPriorities().keys).distinct()
-            .map { pkg -> pkg to (seen[pkg] ?: appLabel(context, pkg)) }
-            .sortedBy { it.second.lowercase() }
-    }
 
-    Text("Which apps matter", style = MaterialTheme.typography.bodyMedium)
     Text(
-        "High: Ifa nudges you and leans toward calling it urgent. Normal: nudges you, urgent only if it clearly is. " +
-            "Low: kept quietly, you hear it only if you ask. Off: never sent to Ifa.",
+        "Choose which apps go to Ifa, and what matters in each, in the Apps tab.",
         style = MaterialTheme.typography.bodySmall
     )
-    PriorityPicker("All other apps", fallback) {
-        fallback = it
-        IfaSettings.defaultAppPriority = it
-    }
-    TextButton(onClick = { showApps = !showApps }) {
-        Text(if (showApps) "Hide apps" else "Set it per app (${apps.size})")
-    }
-    if (showApps) {
-        if (apps.isEmpty()) Text("Apps show up here after they post a notification.", style = MaterialTheme.typography.bodySmall)
-        apps.forEach { (pkg, label) ->
-            PriorityPicker(label, priorities[pkg] ?: fallback) {
-                IfaSettings.setAppPriority(pkg, it)
-                priorities = IfaSettings.appPriorities()
-            }
-        }
-    }
-
     SettingSlider("Group a sender's messages for", IfaSettings.notifSettleSec, 1f..30f, { "%.0f s".format(it) },
         "Wait this long after someone's last message before Ifa judges the whole group. Raise it for people who send many short messages.") {
         IfaSettings.notifSettleSec = it.roundToInt().toFloat(); sync()
@@ -682,22 +666,6 @@ private fun NotificationRules() {
 }
 
 @Composable
-private fun PriorityPicker(label: String, selected: String, onSelect: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            IfaSettings.PRIORITIES.forEach { priority ->
-                FilterChip(
-                    selected = priority == selected,
-                    onClick = { onSelect(priority) },
-                    label = { Text(priority.replaceFirstChar { it.uppercase() }) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun SettingSlider(
     label: String,
     initial: Float,
@@ -711,11 +679,6 @@ private fun SettingSlider(
     Slider(value = value, onValueChange = { value = it }, valueRange = range, onValueChangeFinished = { onDone(value) })
     if (help.isNotEmpty()) Text(help, style = MaterialTheme.typography.bodySmall)
 }
-
-private fun appLabel(context: Context, packageName: String): String = runCatching {
-    val pm = context.packageManager
-    pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
-}.getOrDefault(packageName)
 
 @Composable
 private fun SettingSwitch(title: String, description: String, checked: Boolean, onChange: (Boolean) -> Unit) {
