@@ -1,7 +1,7 @@
 package com.ifanotif.ifanotif
 
 import android.app.Application
-import com.ifanotif.ifanotif.api.RetrofitClient
+import com.ifanotif.ifanotif.legacy.RetrofitClient
 import com.ifanotif.ifanotif.ifa.IfaSettings
 import com.ifanotif.ifanotif.utils.CrashLog
 

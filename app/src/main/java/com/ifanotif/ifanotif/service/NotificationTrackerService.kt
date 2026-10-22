@@ -3,9 +3,9 @@ package com.ifanotif.ifanotif.service
 import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import com.ifanotif.ifanotif.dto.NotificationRequest
+import com.ifanotif.ifanotif.legacy.NotificationRequest
 import com.ifanotif.ifanotif.ifa.IfaSettings
-import com.ifanotif.ifanotif.repository.NotificationRepository
+import com.ifanotif.ifanotif.legacy.NotificationRepository
 import com.ifanotif.ifanotif.utils.AppLogger
 import com.ifanotif.ifanotif.utils.DeviceUtils
 import kotlinx.coroutines.CoroutineScope

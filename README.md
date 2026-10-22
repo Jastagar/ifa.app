@@ -45,6 +45,24 @@ The app finds the PC on its own by broadcasting on UDP 8788. If your router bloc
 
 Everything runs over one WebSocket (`ws://<pc>:8789/phone`, header `X-IFA-Token: <pairing code>`). Text frames are JSON events, binary frames are audio. Notifications use the same socket (`{"type":"notification", ...}`).
 
+Project layout (`app/src/main/java/com/ifanotif/ifanotif/`):
+
+```
+MainActivity.kt        the activity: tabs (Ifa, Apps) and waking over the lock screen
+IfaApp.kt              Application class
+ui/home/               Ifa tab: status, talk button, meters, conversation, text input, logs
+ui/settings/           Settings card: pairing, wake word, your voice, notification rules
+ui/apps/               Apps tab: which apps' notifications reach Ifa, with a note for each
+ui/theme/              Compose theme
+ifa/                   talking to the PC: discovery, WebSocket, settings, shared state
+voice/                 on-device audio: wake word, mic, endpointing, playback
+service/               background services: voice loop, notification listener
+legacy/                optional Spring Boot upload (off by default)
+utils/                 logging, crash log, device id
+```
+
+Icon artwork lives in `branding/` (see its README); the generated launcher icons are in `res/mipmap-*`.
+
 | Code | What it does |
 |---|---|
 | `service/IfaVoiceService.kt` | Foreground service: discovery, reconnects, the listen → think → speak state machine, waking the screen |

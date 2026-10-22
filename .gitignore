@@ -1,0 +1,19 @@
+# Gradle and build output
+.gradle/
+build/
+/captures
+.externalNativeBuild
+.cxx
+
+# Android Studio: personal workspace files (shared project settings stay tracked)
+.idea/workspace.xml
+.idea/caches/
+.idea/libraries/
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetSelector.xml
+.idea/deviceManager.xml
+*.iml
+
+# macOS
+.DS_Store
