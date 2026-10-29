@@ -84,7 +84,10 @@ class IfaConnection(
         private val client = OkHttpClient.Builder()
             .connectTimeout(4, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)
-            .pingInterval(10, TimeUnit.SECONDS)
+            // OkHttp drops the socket if a pong is late by one interval. With the screen off, Android's
+            // Wi-Fi power saving can hold packets for seconds (the low-latency Wi-Fi lock only works on
+            // screen), and 10 s dropped healthy connections. Ifa itself pings every 30 s.
+            .pingInterval(25, TimeUnit.SECONDS)
             .build()
     }
 }
