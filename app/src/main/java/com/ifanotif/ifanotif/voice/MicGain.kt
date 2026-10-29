@@ -1,6 +1,7 @@
 package com.ifanotif.ifanotif.voice
 
 import kotlin.math.abs
+import kotlin.math.tanh
 import kotlin.math.roundToInt
 
 /**
@@ -17,8 +18,22 @@ object MicGain {
 
     fun apply(chunk: ShortArray, gain: Float): ShortArray {
         if (gain <= 1.001f) return chunk
-        return ShortArray(chunk.size) { i -> (chunk[i] * gain).roundToInt().coerceIn(-32768, 32767).toShort() }
+        return ShortArray(chunk.size) { i -> (limit(chunk[i] / 32768f * gain) * 32767f).roundToInt().toShort() }
     }
+
+    /**
+     * Soft limiter: unchanged below KNEE, then curves smoothly towards full scale. Hard clipping at
+     * 4-16x gain flattened loud syllables into crackle, which Whisper hears as noise.
+     */
+    fun limit(x: Float): Float {
+        val a = abs(x)
+        if (a <= KNEE) return x
+        val over = (a - KNEE) / (1f - KNEE)
+        val y = KNEE + (1f - KNEE) * tanh(over)
+        return if (x < 0) -y else y
+    }
+
+    private const val KNEE = 0.7f
 
     fun peak(chunk: ShortArray): Float {
         var max = 0
