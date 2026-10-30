@@ -40,9 +40,17 @@ object IfaSettings {
         get() = prefs.getString("mic_boost", "")!!
         set(value) = prefs.edit().putString("mic_boost", value.trim()).apply()
 
+    /** Phone's own noise suppression, echo cancelling and auto gain (VOICE_COMMUNICATION mic). */
+    var noiseReduction: Boolean
+        get() = prefs.getBoolean("noise_reduction", true)
+        set(value) = prefs.edit().putBoolean("noise_reduction", value).apply()
+
+    // Learned separately per mic mode: the cleaned mic is already levelled, so it needs far less boost.
+    private val gainKey get() = if (noiseReduction) "learned_mic_gain_nr" else "learned_mic_gain"
+
     var learnedMicGain: Float
-        get() = prefs.getFloat("learned_mic_gain", MicGain.DEFAULT)
-        set(value) = prefs.edit().putFloat("learned_mic_gain", value).apply()
+        get() = prefs.getFloat(gainKey, if (noiseReduction) MicGain.DEFAULT_CLEAN else MicGain.DEFAULT)
+        set(value) = prefs.edit().putFloat(gainKey, value).apply()
 
     fun micGain(): Float = micBoost.toFloatOrNull()?.coerceIn(MicGain.MIN, MicGain.MAX) ?: learnedMicGain
 

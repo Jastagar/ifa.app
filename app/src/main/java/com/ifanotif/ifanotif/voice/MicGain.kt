@@ -11,6 +11,7 @@ import kotlin.math.roundToInt
  */
 object MicGain {
     const val DEFAULT = 4f
+    const val DEFAULT_CLEAN = 1f
     const val MIN = 1f
     const val MAX = 16f
     private const val TARGET_PEAK = 0.5f

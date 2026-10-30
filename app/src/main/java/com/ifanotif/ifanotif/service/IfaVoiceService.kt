@@ -109,6 +109,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
             ACTION_TALK -> post { onTalkPressed() }
             ACTION_RECONNECT -> post { reconnect() }
             ACTION_SETTINGS_CHANGED -> post { updateMic() }
+            ACTION_MIC_CHANGED -> post { mic.stop(); updateMic() }
         }
         return START_NOT_STICKY
     }
@@ -686,6 +687,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
         const val ACTION_TALK = "com.ifanotif.ifanotif.TALK"
         const val ACTION_RECONNECT = "com.ifanotif.ifanotif.RECONNECT"
         const val ACTION_SETTINGS_CHANGED = "com.ifanotif.ifanotif.SETTINGS_CHANGED"
+        const val ACTION_MIC_CHANGED = "com.ifanotif.ifanotif.MIC_CHANGED"
         private const val SERVICE_CHANNEL = "ifa_service"
         private const val WAKE_CHANNEL = "ifa_wake"
         private const val SERVICE_NOTIFICATION_ID = 1

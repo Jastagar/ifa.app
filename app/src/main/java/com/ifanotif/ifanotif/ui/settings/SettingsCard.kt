@@ -56,6 +56,7 @@ fun SettingsCard() {
     var threshold by remember { mutableStateOf(IfaSettings.wakeThreshold) }
     var wakeWord by remember { mutableStateOf(IfaSettings.wakeWordEnabled) }
     var wakeScreen by remember { mutableStateOf(IfaSettings.wakeScreen) }
+    var noiseReduction by remember { mutableStateOf(IfaSettings.noiseReduction) }
     var forward by remember { mutableStateOf(IfaSettings.forwardNotifications) }
     var legacy by remember { mutableStateOf(IfaSettings.legacyBackendEnabled) }
     var backendUrl by remember { mutableStateOf(RetrofitClient.currentBaseUrl()) }
@@ -135,6 +136,11 @@ fun SettingsCard() {
             )
             Text("Lower it if soft words get treated as silence; raise it if background noise keeps Ifa listening.", style = MaterialTheme.typography.bodySmall)
             var boost by remember { mutableStateOf(IfaSettings.micBoost) }
+            SettingSwitch("Noise reduction", "Use the phone's call-quality mic: noise suppression, echo cancelling and auto gain. Turn off to compare in the Transcripts tab.", noiseReduction) {
+                noiseReduction = it
+                IfaSettings.noiseReduction = it
+                IfaVoiceService.send(context, IfaVoiceService.ACTION_MIC_CHANGED)
+            }
             OutlinedTextField(
                 value = boost,
                 onValueChange = {
