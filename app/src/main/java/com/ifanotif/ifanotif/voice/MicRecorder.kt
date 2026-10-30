@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.os.Process
 import com.ifanotif.ifanotif.utils.AppLogger
 
 class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
@@ -34,9 +33,6 @@ class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
 
     @SuppressLint("MissingPermission")
     private fun record() {
-        // Audio threads must not be starved: if this thread stalls longer than the recorder's buffer
-        // (screen off, CPU busy), Android drops samples and the clip Ifa hears comes out choppy.
-        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val recorder = try {
             AudioRecord(
@@ -44,7 +40,10 @@ class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
-                maxOf(minBuffer, SAMPLE_RATE * 2) // 1 s of slack (was ~0.3 s)
+                // 1 s of slack (was ~0.3 s): if this thread stalls longer than the buffer, Android drops
+                // samples and the clip comes out choppy. Not urgent-audio priority: the wake-word model
+                // runs on this thread too and then starved playback and the network.
+                maxOf(minBuffer, SAMPLE_RATE * 2)
             )
         } catch (e: Exception) {
             AppLogger.log("Mic unavailable: ${e.message}")
