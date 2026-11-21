@@ -1,6 +1,8 @@
 package com.ifanotif.ifanotif.service
 
 import android.app.Notification
+import android.content.ComponentName
+import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.ifanotif.ifanotif.legacy.NotificationRequest
@@ -30,7 +32,8 @@ class NotificationTrackerService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
 
-        AppLogger.log("Notification Listener Disconnected")
+        AppLogger.log("Notification Listener Disconnected; asking Android to reconnect it")
+        rebind(this)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -84,6 +87,17 @@ class NotificationTrackerService : NotificationListenerService() {
         }
 
         if (IfaSettings.legacyBackendEnabled) upload(request)
+    }
+
+    companion object {
+        /**
+         * Android often unbinds a notification listener after the app is updated or killed, and then never
+         * calls it again until access is toggled. Asking for a rebind brings it back (no-op without access).
+         */
+        fun rebind(context: Context) {
+            runCatching { requestRebind(ComponentName(context, NotificationTrackerService::class.java)) }
+                .onFailure { AppLogger.log("Couldn't reconnect the notification listener: ${it.message}") }
+        }
     }
 
     private fun upload(request: NotificationRequest) {

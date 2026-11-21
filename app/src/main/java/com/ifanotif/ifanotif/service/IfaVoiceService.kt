@@ -84,6 +84,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        NotificationTrackerService.rebind(this)
         createChannels()
         ServiceCompat.startForeground(
             this, SERVICE_NOTIFICATION_ID, serviceNotification(),
