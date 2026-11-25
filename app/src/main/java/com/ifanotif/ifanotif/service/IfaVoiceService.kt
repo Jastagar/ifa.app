@@ -31,6 +31,7 @@ import com.ifanotif.ifanotif.utils.AppLogger
 import com.ifanotif.ifanotif.voice.Endpointer
 import com.ifanotif.ifanotif.voice.MicGain
 import com.ifanotif.ifanotif.voice.MicRecorder
+import com.ifanotif.ifanotif.voice.RecallBuffer
 import com.ifanotif.ifanotif.voice.SpeechPlayer
 import com.ifanotif.ifanotif.voice.WakeWordEngine
 import org.json.JSONObject
@@ -75,6 +76,8 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     @Volatile private var endpointer: Endpointer? = null
     @Volatile private var peakLevel = 0f
     @Volatile private var gain = 1f
+    private val recall = RecallBuffer()
+    @Volatile private var recallSnapshot = ShortArray(0)
     @Volatile private var rawPeak = 0f
     private var askedByIfa = false
     private var ignoreUntilTurnEnd = false
@@ -222,6 +225,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 pcThreshold = message.optDouble("wakeThreshold", 0.5).toFloat()
                 pcConsecutive = message.optInt("wakeConsecutive", 2).coerceAtLeast(1)
                 followUpSec = message.optDouble("followupSec", 5.0)
+                recall.resize(message.optInt("recallSec", 0))
                 val name = message.optString("name", connection?.host?.name ?: "PC")
                 retryDelayMs = 2_000
                 IfaState.setPcName(name)
@@ -290,6 +294,17 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 AppLogger.log("Ifa didn't catch that: $reason (loudest mic level on the phone: %.3f)".format(peakLevel))
                 if (reason != "cancelled" && !askedByIfa) IfaState.setProblem("Ifa didn't catch that: $reason")
             }
+            "recall_request" -> {
+                val samples = recallSnapshot
+                val bytes = java.nio.ByteBuffer.allocate(samples.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                bytes.asShortBuffer().put(samples)
+                connection?.send(
+                    org.json.JSONObject().put("type", "recall_audio").put("id", message.optInt("id"))
+                        .put("sampleRate", MicRecorder.SAMPLE_RATE)
+                        .put("pcm", android.util.Base64.encodeToString(bytes.array(), android.util.Base64.NO_WRAP))
+                )
+                AppLogger.log("Sent the last %.0f s of audio to Ifa".format(samples.size / MicRecorder.SAMPLE_RATE.toFloat()))
+            }
             "turn_end" -> {
                 if (ignoreUntilTurnEnd) {
                     ignoreUntilTurnEnd = false
@@ -329,6 +344,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
 
     private fun startListening(timeoutMs: Long, cue: Boolean, askedByIfa: Boolean = false, enroll: Boolean = false) {
         val conn = connection ?: return
+        if (!enroll) recallSnapshot = recall.snapshot() // what was heard before Sir spoke
         streaming = false
         setPhase(Phase.LISTENING)
         IfaState.setProblem(null)
@@ -443,6 +459,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     // region mic + wake word
 
     private fun onMicChunk(chunk: ShortArray) {
+        recall.add(chunk)
         when (phase) {
             Phase.LISTENING -> if (streaming) stream(chunk)
             Phase.IDLE -> if (!enrolling()) detectWake(chunk)
