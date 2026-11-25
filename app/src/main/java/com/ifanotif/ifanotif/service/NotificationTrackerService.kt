@@ -26,13 +26,15 @@ class NotificationTrackerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
 
-        AppLogger.log("Notification Listener Connected")
+        connected = true
+        report("Notification listener connected")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
 
-        AppLogger.log("Notification Listener Disconnected; asking Android to reconnect it")
+        connected = false
+        report("Notification listener disconnected; asking Android to reconnect it")
         rebind(this)
     }
 
@@ -69,9 +71,10 @@ class NotificationTrackerService : NotificationListenerService() {
         AppLogger.log("Message : $text")
 
         val rule = IfaSettings.appRule(sbn.packageName)
+        report("Notification from $appName (${sbn.packageName})")
 
         if (IfaSettings.forwardNotifications && !rule.allowed) {
-            AppLogger.log("Not sent: $appName is off in the Apps tab")
+            report("Not sent: $appName is off in the Apps tab")
         } else if (IfaSettings.forwardNotifications) {
             val sent = IfaVoiceService.instance?.forwardNotification(
                 JSONObject()
@@ -84,12 +87,22 @@ class NotificationTrackerService : NotificationListenerService() {
                     .put("appNote", rule.note)
             ) ?: false
             AppLogger.log(if (sent) "➡️ Sent to Ifa" else "Ifa not connected; notification not sent")
+        } else {
+            report("Not sent: 'Send notifications to Ifa' is off")
         }
 
         if (IfaSettings.legacyBackendEnabled) upload(request)
     }
 
     companion object {
+        @Volatile var connected = false
+
+        /** Log on the phone and, when connected, in Ifa's console too, so problems show up on the PC. */
+        fun report(text: String) {
+            AppLogger.log(text)
+            IfaVoiceService.instance?.sendLog(text)
+        }
+
         /**
          * Android often unbinds a notification listener after the app is updated or killed, and then never
          * calls it again until access is toggled. Asking for a rebind brings it back (no-op without access).

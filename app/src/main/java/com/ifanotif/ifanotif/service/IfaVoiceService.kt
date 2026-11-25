@@ -243,6 +243,7 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 acquireWifiLock()
                 enterIdle()
                 pushNotificationSettings()
+                reportNotificationAccess()
             }
             "notification_settings" -> AppLogger.log("Ifa is using your notification settings")
             "enroll_ready" -> IfaState.setEnrollment(
@@ -453,6 +454,19 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
     }
 
     private fun enrolling(): Boolean = IfaState.enrollment.value?.finished == false
+
+    fun sendLog(text: String): Boolean =
+        connection?.send("log", "text" to text) ?: false
+
+    private fun reportNotificationAccess() {
+        val access = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+        sendLog(
+            "Notifications: access ${if (access) "on" else "OFF (Settings > Notifications > Notification access)"}, " +
+                "listener ${if (NotificationTrackerService.connected) "connected" else "NOT connected"}, " +
+                "forwarding ${if (IfaSettings.forwardNotifications) "on" else "off"}"
+        )
+        if (access && !NotificationTrackerService.connected) NotificationTrackerService.rebind(this)
+    }
 
     fun pushNotificationSettings(): Boolean =
         connection?.send(IfaSettings.notificationSettingsMessage()) ?: false
