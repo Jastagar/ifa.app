@@ -266,6 +266,12 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
             }
             "reply" -> if (!ignoreUntilTurnEnd) IfaState.addChat(false, message.optString("text"))
             "audio" -> if (!ignoreUntilTurnEnd) {
+                // Ifa can speak without being asked (Claude Code announcements, the greeting). Audio is only
+                // played while THINKING or SPEAKING, so leave IDLE first; this also pauses the wake-word mic.
+                if (phase == Phase.IDLE) {
+                    setPhase(Phase.THINKING)
+                    updateMic()
+                }
                 player.setSampleRate(message.optInt("sampleRate", 24_000))
                 requestFocus()
             }
