@@ -226,6 +226,14 @@ class IfaVoiceService : Service(), IfaConnection.Listener {
                 pcConsecutive = message.optInt("wakeConsecutive", 2).coerceAtLeast(1)
                 followUpSec = message.optDouble("followupSec", 5.0)
                 recall.resize(message.optInt("recallSec", 0))
+                message.optJSONObject("audio")?.let { json ->
+                    val config = com.ifanotif.ifanotif.ifa.AudioConfig.fromJson(json)
+                    if (config != IfaSettings.audio) {
+                        IfaSettings.audio = config
+                        AppLogger.log("New mic settings from Ifa; restarting the mic")
+                        mic.stop()
+                    }
+                }
                 val name = message.optString("name", connection?.host?.name ?: "PC")
                 retryDelayMs = 2_000
                 IfaState.setPcName(name)

@@ -56,7 +56,6 @@ fun SettingsCard() {
     var threshold by remember { mutableStateOf(IfaSettings.wakeThreshold) }
     var wakeWord by remember { mutableStateOf(IfaSettings.wakeWordEnabled) }
     var wakeScreen by remember { mutableStateOf(IfaSettings.wakeScreen) }
-    var noiseReduction by remember { mutableStateOf(IfaSettings.noiseReduction) }
     var forward by remember { mutableStateOf(IfaSettings.forwardNotifications) }
     var legacy by remember { mutableStateOf(IfaSettings.legacyBackendEnabled) }
     var backendUrl by remember { mutableStateOf(RetrofitClient.currentBaseUrl()) }
@@ -135,24 +134,11 @@ fun SettingsCard() {
                 valueRange = 0.2f..0.9f
             )
             Text("Lower it if soft words get treated as silence; raise it if background noise keeps Ifa listening.", style = MaterialTheme.typography.bodySmall)
-            var boost by remember { mutableStateOf(IfaSettings.micBoost) }
-            SettingSwitch("Noise reduction", "Use the phone's call-quality mic: noise suppression, echo cancelling and auto gain. Turn off to compare in the Transcripts tab.", noiseReduction) {
-                noiseReduction = it
-                IfaSettings.noiseReduction = it
-                IfaVoiceService.send(context, IfaVoiceService.ACTION_MIC_CHANGED)
-            }
-            OutlinedTextField(
-                value = boost,
-                onValueChange = {
-                    boost = it
-                    IfaSettings.micBoost = it
-                },
-                label = { Text("Mic boost (optional)") },
-                placeholder = { Text("Auto (now %.1fx)".format(IfaSettings.learnedMicGain)) },
-                supportingText = { Text("1–16. Leave empty to learn it from how loud you speak. Raise it if Ifa misses what you say.") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth()
+            val audio = IfaSettings.audio
+            Text(
+                "Mic: ${audio.source.replace('_', ' ')}, boost ${if (audio.boost > 0) "%.1fx".format(audio.boost) else "auto (now %.1fx)".format(IfaSettings.learnedMicGain)}. " +
+                    "Change the mic source, filters and boost in the Ifa launcher under Phone app; they apply when the phone reconnects.",
+                style = MaterialTheme.typography.bodySmall
             )
             SettingSwitch("Turn the screen on", "When the wake word fires, wake the screen and show Ifa, even over the lock screen.", wakeScreen) {
                 wakeScreen = it

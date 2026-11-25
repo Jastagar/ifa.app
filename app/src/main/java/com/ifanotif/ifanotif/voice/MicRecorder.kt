@@ -38,11 +38,17 @@ class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
 
     @SuppressLint("MissingPermission")
     private fun record() {
-        // VOICE_RECOGNITION gives near-raw audio on most phones (no noise suppression), which the gain then
-        // amplified along with the room. VOICE_COMMUNICATION is the calls mode: the phone's own noise
-        // suppression, echo cancelling and auto gain, often on dedicated hardware.
-        val clean = IfaSettings.noiseReduction
-        val source = if (clean) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION
+        // Chosen in Ifa's launcher. VOICE_COMMUNICATION is the calls mode, with the phone's own noise
+        // suppression, echo cancelling and auto gain (often on dedicated hardware); VOICE_RECOGNITION is
+        // near raw on most phones; CAMCORDER is tuned for distant sound; UNPROCESSED is raw where supported.
+        val config = IfaSettings.audio
+        val source = when (config.source) {
+            "voice_recognition" -> MediaRecorder.AudioSource.VOICE_RECOGNITION
+            "mic" -> MediaRecorder.AudioSource.MIC
+            "unprocessed" -> MediaRecorder.AudioSource.UNPROCESSED
+            "camcorder" -> MediaRecorder.AudioSource.CAMCORDER
+            else -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        }
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val recorder = try {
             AudioRecord(
@@ -67,7 +73,7 @@ class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
             return
         }
 
-        val effects = if (clean) attachEffects(recorder.audioSessionId) else emptyList()
+        val effects = attachEffects(recorder.audioSessionId, config)
         recorder.startRecording()
         try {
             while (running && Thread.currentThread() === thread) {
@@ -96,19 +102,21 @@ class MicRecorder(private val onChunk: (ShortArray) -> Unit) {
         }
     }
 
-    private fun attachEffects(session: Int): List<AudioEffect> {
+    private fun attachEffects(session: Int, config: com.ifanotif.ifanotif.ifa.AudioConfig): List<AudioEffect> {
         val found = mutableListOf<AudioEffect>()
         val report = listOf(
-            "noise suppressor" to (if (NoiseSuppressor.isAvailable()) runCatching { NoiseSuppressor.create(session) }.getOrNull() else null),
-            "echo canceller" to (if (AcousticEchoCanceler.isAvailable()) runCatching { AcousticEchoCanceler.create(session) }.getOrNull() else null),
-            "auto gain" to (if (AutomaticGainControl.isAvailable()) runCatching { AutomaticGainControl.create(session) }.getOrNull() else null),
-        ).joinToString(", ") { (name, effect) ->
-            if (effect != null && runCatching { effect.enabled = true }.isSuccess) {
-                found += effect
-                "$name on"
-            } else "$name not on this phone"
+            Triple("noise suppressor", config.noiseSuppression, { if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(session) else null }),
+            Triple("echo canceller", config.echoCancel, { if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(session) else null }),
+            Triple("auto gain", config.autoGain, { if (AutomaticGainControl.isAvailable()) AutomaticGainControl.create(session) else null }),
+        ).joinToString(", ") { (name, wanted, create) ->
+            val effect: AudioEffect? = runCatching { create() }.getOrNull()
+            when {
+                effect == null -> "$name not on this phone"
+                runCatching { effect.enabled = wanted }.isFailure -> { effect.release(); "$name failed" }
+                else -> { found += effect; "$name ${if (wanted) "on" else "off"}" }
+            }
         }
-        AppLogger.log("Mic: noise reduction mode ($report)")
+        AppLogger.log("Mic: ${config.source} ($report, boost ${if (config.boost > 0) "%.1fx".format(config.boost) else "auto"})")
         return found
     }
 

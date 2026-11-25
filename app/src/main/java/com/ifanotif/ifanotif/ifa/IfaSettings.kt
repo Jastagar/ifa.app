@@ -35,24 +35,25 @@ object IfaSettings {
         get() = prefs.getString("wake_threshold", "")!!
         set(value) = prefs.edit().putString("wake_threshold", value.trim()).apply()
 
-    /** Empty means "learn it automatically". */
-    var micBoost: String
-        get() = prefs.getString("mic_boost", "")!!
-        set(value) = prefs.edit().putString("mic_boost", value.trim()).apply()
+    /**
+     * The mic setup chosen in Ifa's launcher (Phone app group), sent in "ready" and remembered here so the
+     * mic starts the same way before the next connect.
+     */
+    var audio: AudioConfig
+        get() = AudioConfig.fromJson(prefs.getString("audio_config", null))
+        set(value) = prefs.edit().putString("audio_config", value.toJson().toString()).apply()
 
-    /** Phone's own noise suppression, echo cancelling and auto gain (VOICE_COMMUNICATION mic). */
-    var noiseReduction: Boolean
-        get() = prefs.getBoolean("noise_reduction", true)
-        set(value) = prefs.edit().putBoolean("noise_reduction", value).apply()
+    /** "" when the boost is learned automatically, else the fixed boost from the launcher. */
+    val micBoost: String get() = audio.boost.takeIf { it > 0f }?.let { "%.1f".format(it) } ?: ""
 
-    // Learned separately per mic mode: the cleaned mic is already levelled, so it needs far less boost.
-    private val gainKey get() = if (noiseReduction) "learned_mic_gain_nr" else "learned_mic_gain"
+    // Learned separately per mic source: processed sources are already levelled and need far less boost.
+    private val gainKey get() = "learned_mic_gain_" + audio.source
 
     var learnedMicGain: Float
-        get() = prefs.getFloat(gainKey, if (noiseReduction) MicGain.DEFAULT_CLEAN else MicGain.DEFAULT)
+        get() = prefs.getFloat(gainKey, if (audio.source == "voice_communication") MicGain.DEFAULT_CLEAN else MicGain.DEFAULT)
         set(value) = prefs.edit().putFloat(gainKey, value).apply()
 
-    fun micGain(): Float = micBoost.toFloatOrNull()?.coerceIn(MicGain.MIN, MicGain.MAX) ?: learnedMicGain
+    fun micGain(): Float = audio.boost.takeIf { it > 0f }?.coerceIn(MicGain.MIN, MicGain.MAX) ?: learnedMicGain
 
     /** How long a pause ends what you're saying. */
     var silenceSec: Float
